@@ -14,32 +14,60 @@ A high-performance, robust, and entirely offline framework for translating large
 
 ---
 
-## 🚀 Quick Start
+## 💻 Prerequisites
 
-### 1. Local Setup
-```bash
-# Create and activate environment
-python3 -m venv venv
-source venv/bin/activate
+### For macOS Users
+To run this tool on a Mac without affecting your system settings, you need **one** of the following:
+1.  **Docker Desktop** (Recommended): The easiest way to run everything in a clean container.
+2.  **Homebrew Python**: If running natively, we recommend using Homebrew to install Python 3.11 (`brew install python@3.11`).
 
-# Install dependencies
-pip install -r requirements.txt
+### For Linux Users
+- **Python 3.8+** and `python3-venv`
+- **Docker** (optional, for containerized runs)
 
-# Download model assets (One-time, 2.4GB)
-python scripts/download_model.py
-```
+---
 
-### 2. Usage
-```bash
-python main.py --input data.csv --output results.csv
-```
+## 🚀 Installation & Usage
 
-### 3. Docker (Instant Deployment)
-Build and run the containerized translator:
-```bash
-docker build -t arabic-translator .
-docker run -v $(pwd):/data arabic-translator --input /data/input.csv --output /data/output.csv
-```
+### Option A: Docker (Professional & Isolated)
+*Best for: Users who don't want to manage Python environments.*
+
+1.  **Build the image** (Bakes the 2.4GB model inside):
+    ```bash
+    docker build -t arabic-translator .
+    ```
+2.  **Run the translator**:
+    ```bash
+    docker run -v $(pwd):/data arabic-translator --input /data/input.csv --output /data/results.csv
+    ```
+
+### Option B: Native Setup (Isolated Virtual Environment)
+*Best for: Developers who want to run or test the code directly.*
+
+1.  **Create an isolated environment**:
+    ```bash
+    python3 -m venv venv
+    source venv/bin/activate  # On macOS/Linux
+    ```
+2.  **Install dependencies**:
+    ```bash
+    pip install -r requirements.txt
+    ```
+3.  **Download the model** (Required once):
+    ```bash
+    python scripts/download_model.py
+    ```
+4.  **Run**:
+    ```bash
+    python main.py --input data.csv --output results.csv
+    ```
+
+---
+
+## 🛡 Environment Safety
+This project is designed to be **environment-safe**:
+- **Docker path:** Zero installation on the host machine. Everything stays inside the container.
+- **Native path:** Uses `venv` to ensure no global Python packages are ever modified.
 
 ---
 
