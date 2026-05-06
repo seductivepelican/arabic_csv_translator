@@ -2,118 +2,135 @@ import pandas as pd
 import argparse
 import sys
 import os
-import time
+import logging
+from tqdm import tqdm
+from typing import List, Optional
 from translator import ArabicTranslator
 import config
 
-def get_checkpoint_path(output_path):
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO, 
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler("translation_session.log"),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger(__name__)
+
+def get_checkpoint_path(output_path: str) -> str:
+    """Generates the checkpoint file path for a given output path."""
     return output_path + config.CHECKPOINT_SUFFIX
 
-def process_csv(input_path, output_path, resume=True):
+def process_csv(input_path: str, output_path: str, resume: bool = True) -> None:
+    """
+    Orchestrates the batch translation of a CSV file with checkpointing support.
+    
+    Args:
+        input_path (str): Path to the source CSV file.
+        output_path (str): Path to save the translated CSV.
+        resume (bool): Whether to attempt resuming from an existing checkpoint.
+    """
     checkpoint_path = get_checkpoint_path(output_path)
     
     # 1. Load Data
-    print(f"Reading input file: {input_path}")
+    logger.info(f"Loading input file: {input_path}")
     try:
-        # For 1M+ rows, reading entire CSV might be heavy but usually fits in RAM on a good laptop.
-        # If RAM is an issue, we could switch to chunk-based reading.
         df = pd.read_csv(input_path)
     except Exception as e:
-        print(f"Error reading CSV: {e}")
+        logger.error(f"Critical Error: Could not read input CSV: {e}")
         return
 
     if config.TEXT_COLUMN not in df.columns:
-        print(f"Error: Column '{config.TEXT_COLUMN}' not found in CSV.")
+        logger.error(f"Critical Error: Required column '{config.TEXT_COLUMN}' missing from CSV.")
         return
 
     # 2. Check for Resume/Checkpoint
     start_index = 0
     if resume and os.path.exists(checkpoint_path):
-        print(f"Checkpoint found at {checkpoint_path}. Resuming...")
-        df_checkpoint = pd.read_csv(checkpoint_path)
-        
-        # Identify where we left off based on the presence of the translated column
-        # and checking for non-null values in the status column.
-        if config.STATUS_COLUMN in df_checkpoint.columns:
-            start_index = df_checkpoint[config.STATUS_COLUMN].notna().sum()
-            print(f"Skipping already processed {start_index} rows.")
-            df = df_checkpoint # Use the checkpointed data as the base
-        else:
-            print("Checkpoint invalid (no status column). Starting from beginning.")
+        logger.info(f"Checkpoint detected at {checkpoint_path}. Attempting to resume...")
+        try:
+            df_checkpoint = pd.read_csv(checkpoint_path)
+            if config.STATUS_COLUMN in df_checkpoint.columns:
+                start_index = df_checkpoint[config.STATUS_COLUMN].notna().sum()
+                logger.info(f"Resuming from row {start_index} of {len(df)}.")
+                df = df_checkpoint
+            else:
+                logger.warning("Checkpoint file is malformed. Starting from row 0.")
+        except Exception as e:
+            logger.error(f"Error reading checkpoint: {e}. Starting from row 0.")
 
     # 3. Initialize Translator
     try:
         translator = ArabicTranslator()
     except Exception as e:
-        print(f"Fatal: Could not initialize translator. {e}")
+        logger.error(f"Fatal: Translator initialization failed: {e}")
         sys.exit(1)
 
     # 4. Processing Loop
-    print(f"Processing {len(df) - start_index} remaining rows (Total: {len(df)})...")
-    print(f"Using inference batch size: {config.INFERENCE_BATCH_SIZE}")
+    logger.info(f"Processing {len(df) - start_index} records using batch size {config.INFERENCE_BATCH_SIZE}")
     
-    # Ensure columns exist in df and have object (string-friendly) dtype
+    # Ensure columns exist and have appropriate dtype
     for col in [config.TRANSLATED_COLUMN, config.STATUS_COLUMN, config.ERROR_COLUMN]:
         if col not in df.columns:
             df[col] = None
         df[col] = df[col].astype(object)
 
     try:
-        # Process in batches
-        for i in range(start_index, len(df), config.INFERENCE_BATCH_SIZE):
-            end_idx = min(i + config.INFERENCE_BATCH_SIZE, len(df))
-            batch_texts = df.loc[i:end_idx-1, config.TEXT_COLUMN].tolist()
-            
-            # Simple progress logging
-            if i % 100 == 0:
-                print(f"Row {i}/{len(df)} ({(i/len(df)*100):.2f}%)")
+        # Process using tqdm progress bar
+        with tqdm(total=len(df), initial=start_index, desc="Translating", unit="row") as pbar:
+            for i in range(start_index, len(df), config.INFERENCE_BATCH_SIZE):
+                end_idx = min(i + config.INFERENCE_BATCH_SIZE, len(df))
+                batch_texts = df.loc[i:end_idx-1, config.TEXT_COLUMN].tolist()
+                
+                # Perform batch inference
+                batch_results = translator.translate_batch(batch_texts)
+                
+                # Update DataFrame with results
+                for j, (result, status, error_msg) in enumerate(batch_results):
+                    current_idx = i + j
+                    df.at[current_idx, config.TRANSLATED_COLUMN] = result
+                    df.at[current_idx, config.STATUS_COLUMN] = status
+                    df.at[current_idx, config.ERROR_COLUMN] = error_msg
 
-            # Translate batch
-            batch_results = translator.translate_batch(batch_texts)
-            
-            # Update DataFrame
-            for j, (result, status, error_msg) in enumerate(batch_results):
-                current_idx = i + j
-                df.at[current_idx, config.TRANSLATED_COLUMN] = result
-                df.at[current_idx, config.STATUS_COLUMN] = status
-                df.at[current_idx, config.ERROR_COLUMN] = error_msg
+                # Update progress bar
+                pbar.update(len(batch_texts))
 
-            # 5. Checkpoint saving
-            # We save every CHECKPOINT_BATCH_SIZE rows
-            if (i // config.CHECKPOINT_BATCH_SIZE) < (end_idx // config.CHECKPOINT_BATCH_SIZE):
-                df.to_csv(checkpoint_path, index=False)
+                # 5. Incremental Checkpoint saving
+                if (i // config.CHECKPOINT_BATCH_SIZE) < (end_idx // config.CHECKPOINT_BATCH_SIZE):
+                    df.to_csv(checkpoint_path, index=False)
 
     except KeyboardInterrupt:
-        print("\nProcess interrupted by user. Saving checkpoint...")
+        logger.info("\nSession interrupted by user. Persisting current progress to checkpoint...")
         df.to_csv(checkpoint_path, index=False)
-        print(f"Progress saved to {checkpoint_path}. Run again to resume.")
+        logger.info(f"Checkpoint saved. Re-run command to resume from row {df[config.STATUS_COLUMN].notna().sum()}.")
         sys.exit(0)
     except Exception as e:
-        print(f"\nUnexpected error during processing: {e}")
+        logger.error(f"Unexpected runtime error during processing loop: {e}")
         df.to_csv(checkpoint_path, index=False)
-        print(f"Progress saved to {checkpoint_path}.")
+        logger.info("Emergency checkpoint saved.")
         raise
 
-    # 6. Final Save
-    print(f"Translation complete. Saving final results to {output_path}")
+    # 6. Final Save & Cleanup
+    logger.info(f"Batch processing complete. Saving final results to {output_path}")
     df.to_csv(output_path, index=False)
     
-    # Cleanup checkpoint
     if os.path.exists(checkpoint_path):
         os.remove(checkpoint_path)
-    print("Done!")
+    logger.info("Cleaned up checkpoint files. Task finished.")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Offline Arabic to English Translator (Batch Mode)")
-    parser.add_argument("--input", required=True, help="Path to input CSV file")
-    parser.add_argument("--output", required=True, help="Path to output CSV file")
-    parser.add_argument("--no-resume", action="store_false", dest="resume", help="Do not resume from checkpoint")
+    parser = argparse.ArgumentParser(description="Professional Offline Arabic to English Translation Framework")
+    parser.add_argument("--input", required=True, help="Input CSV file path")
+    parser.add_argument("--output", required=True, help="Output CSV file path")
+    parser.add_argument("--no-resume", action="store_false", dest="resume", help="Disable auto-resume from checkpoint")
     
     args = parser.parse_args()
     
     if not os.path.exists(config.MODEL_PATH):
-        print(f"Error: Model not found at {config.MODEL_PATH}.")
-        print("Please run 'python scripts/download_model.py' first while online.")
+        logger.error(f"Model assets not found at {config.MODEL_PATH}.")
+        logger.info("Run './venv/bin/python scripts/download_model.py' to download required model files.")
         sys.exit(1)
 
     process_csv(args.input, args.output, resume=args.resume)

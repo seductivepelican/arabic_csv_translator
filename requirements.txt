@@ -5,3 +5,4 @@ sentencepiece
 sacremoses
 protobuf
 pytest
+tqdm
