@@ -1,7 +1,11 @@
 import os
 import logging
+import warnings
 from typing import List, Tuple, Optional
 import torch
+
+# Suppress noisy deprecation warnings from underlying C-libraries (SWIG/SentencePiece)
+warnings.filterwarnings("ignore", category=DeprecationWarning, message="builtin type .* has no __module__ attribute")
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, PreTrainedModel, PreTrainedTokenizer
 import config
 
