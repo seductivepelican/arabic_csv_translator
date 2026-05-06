@@ -25,100 +25,78 @@ def get_checkpoint_path(output_path: str) -> str:
 
 def process_csv(input_path: str, output_path: str, resume: bool = True) -> None:
     """
-    Orchestrates the batch translation of a CSV file with checkpointing support.
-    
-    Args:
-        input_path (str): Path to the source CSV file.
-        output_path (str): Path to save the translated CSV.
-        resume (bool): Whether to attempt resuming from an existing checkpoint.
+    Orchestrates the batch translation of a CSV file using memory-efficient streaming.
     """
     checkpoint_path = get_checkpoint_path(output_path)
     
-    # 1. Load Data
-    logger.info(f"Loading input file: {input_path}")
-    try:
-        df = pd.read_csv(input_path)
-    except Exception as e:
-        logger.error(f"Critical Error: Could not read input CSV: {e}")
-        return
-
-    if config.TEXT_COLUMN not in df.columns:
-        logger.error(f"Critical Error: Required column '{config.TEXT_COLUMN}' missing from CSV.")
-        return
-
-    # 2. Check for Resume/Checkpoint
+    # 1. Determine starting point for Resume
     start_index = 0
     if resume and os.path.exists(checkpoint_path):
         logger.info(f"Checkpoint detected at {checkpoint_path}. Attempting to resume...")
         try:
-            df_checkpoint = pd.read_csv(checkpoint_path)
-            if config.STATUS_COLUMN in df_checkpoint.columns:
-                start_index = df_checkpoint[config.STATUS_COLUMN].notna().sum()
-                logger.info(f"Resuming from row {start_index} of {len(df)}.")
-                df = df_checkpoint
-            else:
-                logger.warning("Checkpoint file is malformed. Starting from row 0.")
+            # We count rows in the existing output that have a valid status
+            df_check = pd.read_csv(checkpoint_path)
+            if config.STATUS_COLUMN in df_check.columns:
+                # Filter out rows where status is NaN
+                df_valid = df_check.dropna(subset=[config.STATUS_COLUMN])
+                start_index = len(df_valid)
+                # Overwrite checkpoint with ONLY valid rows to ensure clean append
+                df_valid.to_csv(checkpoint_path, index=False)
+                logger.info(f"Resuming from row index {start_index}.")
         except Exception as e:
-            logger.error(f"Error reading checkpoint: {e}. Starting from row 0.")
+            logger.warning(f"Checkpoint unreadable: {e}. Starting from scratch.")
 
-    # 3. Initialize Translator
+    # 2. Initialize Translator
     try:
         translator = ArabicTranslator()
     except Exception as e:
         logger.error(f"Fatal: Translator initialization failed: {e}")
         sys.exit(1)
 
-    # 4. Processing Loop
-    logger.info(f"Processing {len(df) - start_index} records using batch size {config.INFERENCE_BATCH_SIZE}")
-    
-    # Ensure columns exist and have appropriate dtype
-    for col in [config.TRANSLATED_COLUMN, config.STATUS_COLUMN, config.ERROR_COLUMN]:
-        if col not in df.columns:
-            df[col] = None
-        df[col] = df[col].astype(object)
-
+    # 3. Processing Loop (Row-based for perfect resume accuracy)
     try:
-        # Process using tqdm progress bar
-        with tqdm(total=len(df), initial=start_index, desc="Translating", unit="row") as pbar:
-            for i in range(start_index, len(df), config.INFERENCE_BATCH_SIZE):
-                end_idx = min(i + config.INFERENCE_BATCH_SIZE, len(df))
-                batch_texts = df.loc[i:end_idx-1, config.TEXT_COLUMN].tolist()
+        df_input = pd.read_csv(input_path)
+        total_rows = len(df_input)
+        
+        # Open checkpoint file in append mode or write fresh
+        if start_index == 0:
+            # Create fresh file with header
+            df_init = df_input.iloc[0:0].copy()
+            df_init[config.TRANSLATED_COLUMN] = None
+            df_init[config.STATUS_COLUMN] = None
+            df_init[config.ERROR_COLUMN] = None
+            df_init.to_csv(checkpoint_path, index=False)
+            
+        with tqdm(total=total_rows, initial=start_index, desc="Translating", unit="row") as pbar:
+            for i in range(start_index, total_rows, config.INFERENCE_BATCH_SIZE):
+                end_idx = min(i + config.INFERENCE_BATCH_SIZE, total_rows)
+                batch = df_input.iloc[i:end_idx].copy()
                 
-                # Perform batch inference
+                batch_texts = batch[config.TEXT_COLUMN].astype(str).tolist()
                 batch_results = translator.translate_batch(batch_texts)
                 
-                # Update DataFrame with results
-                for j, (result, status, error_msg) in enumerate(batch_results):
-                    current_idx = i + j
-                    df.at[current_idx, config.TRANSLATED_COLUMN] = result
-                    df.at[current_idx, config.STATUS_COLUMN] = status
-                    df.at[current_idx, config.ERROR_COLUMN] = error_msg
-
-                # Update progress bar
-                pbar.update(len(batch_texts))
-
-                # 5. Incremental Checkpoint saving
-                if (i // config.CHECKPOINT_BATCH_SIZE) < (end_idx // config.CHECKPOINT_BATCH_SIZE):
-                    df.to_csv(checkpoint_path, index=False)
+                results, statuses, errors = zip(*batch_results)
+                batch[config.TRANSLATED_COLUMN] = results
+                batch[config.STATUS_COLUMN] = statuses
+                batch[config.ERROR_COLUMN] = errors
+                
+                # Append to checkpoint immediately
+                batch.to_csv(checkpoint_path, mode='a', index=False, header=False)
+                pbar.update(len(batch))
 
     except KeyboardInterrupt:
-        logger.info("\nSession interrupted by user. Persisting current progress to checkpoint...")
-        df.to_csv(checkpoint_path, index=False)
-        logger.info(f"Checkpoint saved. Re-run command to resume from row {df[config.STATUS_COLUMN].notna().sum()}.")
+        logger.info("\nSession interrupted. Progress is safe in the checkpoint file.")
         sys.exit(0)
     except Exception as e:
-        logger.error(f"Unexpected runtime error during processing loop: {e}")
-        df.to_csv(checkpoint_path, index=False)
-        logger.info("Emergency checkpoint saved.")
+        logger.error(f"Processing error: {e}")
         raise
 
-    # 6. Final Save & Cleanup
-    logger.info(f"Batch processing complete. Saving final results to {output_path}")
-    df.to_csv(output_path, index=False)
-    
-    if os.path.exists(checkpoint_path):
-        os.remove(checkpoint_path)
-    logger.info("Cleaned up checkpoint files. Task finished.")
+    # 4. Finalize
+    logger.info(f"Moving final results to {output_path}")
+    if os.path.exists(output_path):
+        os.remove(output_path)
+    os.rename(checkpoint_path, output_path)
+    logger.info("Task finished successfully.")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Professional Offline Arabic to English Translation Framework")
