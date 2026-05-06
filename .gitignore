@@ -1,0 +1,19 @@
+__pycache__/
+.env
+*.csv
+*.checkpoint
+models/
+venv/
+
+# LaTeX
+*.aux
+*.log
+*.out
+*.toc
+*.pdf
+*.synctex.gz
+
+# Python / Testing
+.pytest_cache/
+*.egg-info/
+.DS_Store
