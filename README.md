@@ -102,4 +102,7 @@ While this tool is pre-configured for **Arabic to English**, the underlying NLLB
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## 🎓 Documentation
-A detailed technical report is available in [technical_report.pdf](technical_report.pdf).
+Additional resources and formal documentation:
+- **[Technical Report](docs/technical_report.pdf):** Academic-style overview of system architecture and benchmarks.
+- **[Project Plan](docs/PLAN.md):** Detailed implementation milestones.
+- **[Phase Plans](docs/phases/):** Specific design documents for project upgrades.

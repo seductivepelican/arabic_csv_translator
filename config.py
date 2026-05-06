@@ -18,9 +18,9 @@ MODEL_PATH = "./models/nllb-200-600M"
 # See: https://github.com/facebookresearch/flores/blob/main/flores200/README.md#languages-in-flores-200
 SRC_LANG = "arb_Arab"  # Modern Standard Arabic
 TGT_LANG = "eng_Latn"  # English
-MAX_LENGTH = 512       # NLLB default max length
+MAX_LENGTH = 512  # NLLB default max length
 
 # Processing Configuration
 CHECKPOINT_BATCH_SIZE = 100  # Save progress every X rows
-INFERENCE_BATCH_SIZE = 8     # Number of sentences to translate at once (Batched Inference)
+INFERENCE_BATCH_SIZE = 8  # Number of sentences to translate at once (Batched Inference)
 CHECKPOINT_SUFFIX = ".checkpoint"
