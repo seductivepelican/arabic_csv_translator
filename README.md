@@ -72,10 +72,18 @@ This project is designed to be **environment-safe**:
 ---
 
 ## 🛠 Configuration
-Adjust settings in `config.py` to match your hardware and dataset:
+Adjust settings in `config.py` to match your hardware and dataset.
+
+### Supporting Other Languages
+While this tool is pre-configured for **Arabic to English**, the underlying NLLB-200 model supports over **200 languages**. You can change the language pair in `config.py` using the **FLORES-200** codes.
+
+- **Source:** `SRC_LANG`
+- **Target:** `TGT_LANG`
+- **Full list of supported language codes:** [FLORES-200 Language List](https://github.com/facebookresearch/flores/blob/main/flores200/README.md#languages-in-flores-200)
+
+### Hardware Optimization
 - `INFERENCE_BATCH_SIZE`: Set to 8-16 for CPU, 32-64 for GPU.
 - `CHECKPOINT_BATCH_SIZE`: Frequency of disk persistence.
-- `ID_COLUMN` & `TEXT_COLUMN`: Map to your CSV headers.
 
 ---
 

@@ -13,6 +13,9 @@ ERR_SYSTEM = "[System Error]"
 
 # Model Configuration
 MODEL_PATH = "./models/nllb-200-600M"
+
+# Language Configuration (FLORES-200 Codes)
+# See: https://github.com/facebookresearch/flores/blob/main/flores200/README.md#languages-in-flores-200
 SRC_LANG = "arb_Arab"  # Modern Standard Arabic
 TGT_LANG = "eng_Latn"  # English
 MAX_LENGTH = 512       # NLLB default max length
