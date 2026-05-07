@@ -18,4 +18,5 @@ jobs:
           pip install pandas tqdm pytest
       - name: Test with pytest
         run: |
+          export PYTHONPATH=$PYTHONPATH:.
           pytest tests/test_basic.py
