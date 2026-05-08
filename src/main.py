@@ -6,8 +6,8 @@ import sys
 import pandas as pd
 from tqdm import tqdm
 
-import config
-from translator import ArabicTranslator
+from src import config
+from src.translator import ArabicTranslator
 
 # Configure logging
 logging.basicConfig(

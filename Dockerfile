@@ -27,4 +27,4 @@ RUN python scripts/download_model.py
 
 # Command to run the translator
 # Example usage: docker run -v /local/path:/data translator --input /data/input.csv --output /data/output.csv
-ENTRYPOINT ["python", "main.py"]
+ENTRYPOINT ["python", "src/main.py"]

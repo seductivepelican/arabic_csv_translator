@@ -4,7 +4,7 @@ import sys
 
 import pandas as pd
 
-import config
+from src import config
 
 
 def test_integration_full_run():

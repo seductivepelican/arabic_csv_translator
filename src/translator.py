@@ -4,7 +4,7 @@ import warnings
 import torch
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
-import config
+from src import config
 
 # Suppress noisy deprecation warnings from underlying C-libraries (SWIG/SentencePiece)
 warnings.filterwarnings(

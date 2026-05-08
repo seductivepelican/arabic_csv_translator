@@ -4,16 +4,19 @@ __pycache__/
 *.checkpoint
 models/
 venv/
+ci_env/
+build/
+data/
 
 # LaTeX
-*.aux
-*.log
-*.out
-*.toc
-*.pdf
-*.synctex.gz
+docs/*.aux
+docs/*.log
+docs/*.out
+docs/*.toc
+docs/*.synctex.gz
 
 # Python / Testing
 .pytest_cache/
+.ruff_cache/
 *.egg-info/
 .DS_Store

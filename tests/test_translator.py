@@ -2,8 +2,8 @@ import os
 
 import pytest
 
-import config
-from translator import ArabicTranslator
+from src import config
+from src.translator import ArabicTranslator
 
 # Note: These tests assume the model is downloaded.
 # In a real CI environment, we might mock the model,
