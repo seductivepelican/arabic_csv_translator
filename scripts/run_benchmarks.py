@@ -25,7 +25,7 @@ def run_benchmark(filename):
     start_time = time.time()
 
     result = subprocess.run(
-        [sys.executable, "main.py", "--input", filename, "--output", output, "--no-resume"],
+        [sys.executable, "main.py", "--input", filename, "--output", output],
         capture_output=True,
         text=True,
     )
